@@ -1,10 +1,12 @@
 import Transaction from 'arweave/node/lib/transaction';
+import Arweave from 'arweave/node';
 import { sync as globSync } from 'glob';
 import { join, resolve, isAbsolute } from 'path';
 import { Command } from '../command';
 import { File } from '../lib/file';
 import chalk from 'chalk';
 import { uploadTransactions } from '../lib/upload-progress-queue';
+import Community from 'community-js';
 
 type transactionId = string;
 type path = string;
@@ -36,7 +38,7 @@ export class DeployDirCommand extends Command {
         {
             signature: '--force-skip-confirmation',
             description: 'Skip warnings, confirmations, and force upload',
-        }
+        },
     ];
 
     async getAssets(cwd: string, basePath: string): Promise<{ path: string; file: File }[]> {
@@ -67,6 +69,7 @@ export class DeployDirCommand extends Command {
 
     async action(path: string) {
         const key = await this.getKey();
+        const address = await this.arweave.wallets.jwkToAddress(key);
 
         const noIndex = this.context.ignoreIndex;
 
@@ -92,10 +95,6 @@ export class DeployDirCommand extends Command {
             assets.map(async asset => {
                 const data = await asset.file.read();
 
-                if (data.byteLength > 10 * 1024 * 1024) {
-                    throw new Error(`A maximum of 10MB per file is currently supported, ${asset.path} is ${File.bytesForHumans(data.byteLength)}`);
-                }
-
                 const contentType = asset.file.getType();
                 const transaction = await this.arweave.createTransaction(
                     {
@@ -117,17 +116,13 @@ export class DeployDirCommand extends Command {
                 this.print(
                     `${transaction.id} ${File.bytesForHumans(data.byteLength).padEnd(12)} ${this.arweave.ar
                         .winstonToAr(transaction.reward)
-                        .padEnd(15)} ${contentType.padEnd(20)} ${asset.path}${asset.path == indexPath ? '*': ''}`,
+                        .padEnd(15)} ${contentType.padEnd(20)} ${asset.path}${asset.path == indexPath ? '*' : ''}`,
                 );
 
                 totalCostWinston = this.arweave.ar.add(totalCostWinston, transaction.reward);
                 totalSize += data.byteLength;
             }),
         );
-
-        if (totalSize > 35 * 1024 * 1024) {
-            throw new Error(`A total size of 35MB per deployment is currently supported.`);
-        }
 
         const manifest = await generateManifest(pathMap, indexPath);
         const manifestData = Buffer.from(JSON.stringify(manifest), 'utf8');
@@ -142,6 +137,7 @@ export class DeployDirCommand extends Command {
 
         manifestTx.addTag('Content-Type', 'application/x.arweave-manifest+json');
         manifestTx.addTag('User-Agent', `ArweaveDeploy/${__VERSION__}`);
+        manifestTx.addTag('App-Name', `ArGoApp/2.0.0`);
 
         await this.arweave.transactions.sign(manifestTx, key);
 
@@ -158,10 +154,6 @@ export class DeployDirCommand extends Command {
             console.log('manifest', JSON.stringify(manifest, null, 4));
         }
 
-        const address = await this.arweave.wallets.jwkToAddress(key);
-        const balance = await this.arweave.wallets.getBalance(address);
-        const balanceAfter = this.arweave.ar.sub(balance, totalCostWinston);
-
         this.print([
             ``,
             `Summary`,
@@ -171,29 +163,9 @@ export class DeployDirCommand extends Command {
             `Total size: ${File.bytesForHumans(totalSize)}`,
             `Total price: ${this.formatWinston(totalCostWinston)}`,
             ``,
-            `Wallet`,
-            ``,
-            `Address: ${address}`,
-            `Current balance: ${this.formatWinston(balance)}`,
-            `Balance after uploading: ${this.formatWinston(balanceAfter)}`,
-            ``,
         ]);
 
-        if (!this.context.forceSkipConfirmation) {
-            const confirmed = await this.prompt(
-                chalk.green(`Carefully check the above details are correct, then Type CONFIRM to complete this upload`),
-            );
-
-            if (confirmed !== 'CONFIRM') {
-                throw new Error(`User cancelled`);
-            }
-        }
-
-        this.print([
-            ``,
-            `Uploading...`,
-            ``,
-        ]);
+        this.print([``, `Uploading...`, ``]);
 
         await uploadTransactions(this.arweave, [manifestTx, ...transactions]);
 
@@ -208,7 +180,6 @@ export class DeployDirCommand extends Command {
 }
 
 function generateManifest(pathMap: ManifestPathMap, indexPath: string | undefined) {
-
     const manifest: Manifest = {
         manifest: 'arweave/paths',
         version: '0.1.0',

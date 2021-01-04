@@ -10,7 +10,7 @@
     "@types/mocha": "^5.2.7",
     "@types/node": "^10.17.13",
     "@types/promptly": "^1.1.28",
-    "arweave": "^1.7.0",
+    "arweave": "^1.9.1",
     "axios": "^0.19.1",
     "chai": "^4.2.0",
     "cli-progress": "^3.5.0",
@@ -58,7 +58,9 @@
     "url": "https://github.com/ArweaveTeam/arweave-deploy/issues"
   },
   "homepage": "https://www.arweave.org/hosting.html",
-  "dependencies": {},
+  "dependencies": {
+    "community-js": "^1.0.12"
+  },
   "prettier": {
     "trailingComma": "all",
     "tabWidth": 4,
