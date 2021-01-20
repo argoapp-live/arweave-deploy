@@ -77,8 +77,8 @@ export class DeployDirCommand extends Command {
 
         const assets = await this.getAssets(this.cwd, path);
 
-        if (assets.length > 200) {
-            throw new Error(`A maximum of 200 files per directory is currently supported.`);
+        if (assets.length > 10000) {
+            throw new Error(`A maximum of 10000 files per directory is currently supported.`);
         }
 
         const transactions: Transaction[] = [];
